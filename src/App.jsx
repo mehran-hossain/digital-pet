@@ -64,7 +64,9 @@ export default function App() {
   const [currentSprite, setCurrentSprite] = useState(idleSprite);
   const animationTimeoutRef = useRef(null);
   const trust2SitAnimationTimeoutRef = useRef(null);
+  const interactionCooldownTimeoutRef = useRef(null);
   const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] = useState(false);
+  const [isInteractionCoolingDown, setIsInteractionCoolingDown] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const [messages, setMessages] = useState(() => [
@@ -83,6 +85,7 @@ export default function App() {
   const FADE_OUT_MS = 280;
   const FADE_IN_MS = 280;
   const REPLY_DELAY_MS = 1200;
+  const INTERACTION_COOLDOWN_MS = 700;
 
   const dayIdleSprite = useMemo(() => {
     if (trustLevel === 1) return box2Sprite;
@@ -172,11 +175,26 @@ export default function App() {
     setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
   };
 
+  const beginInteractionCooldown = () => {
+    if (isInteractionCoolingDown) return false;
+    setIsInteractionCoolingDown(true);
+    if (interactionCooldownTimeoutRef.current) {
+      clearTimeout(interactionCooldownTimeoutRef.current);
+    }
+    interactionCooldownTimeoutRef.current = window.setTimeout(() => {
+      setIsInteractionCoolingDown(false);
+      interactionCooldownTimeoutRef.current = null;
+    }, INTERACTION_COOLDOWN_MS);
+    return true;
+  };
+
   const handlePet = () => {
+    if (!beginInteractionCooldown()) return;
     pushSystem("Meowzart stays hidden in the box and avoids touch.");
   };
 
   const handleFeed = () => {
+    if (!beginInteractionCooldown()) return;
     const nextProgress = { ...progress, attemptedFeed: true };
     setProgress(nextProgress);
     pushSystem("You place food nearby, but Meowzart refuses.");
@@ -184,6 +202,7 @@ export default function App() {
   };
 
   const handleSitQuietly = () => {
+    if (!beginInteractionCooldown()) return;
     const nextProgress = {
       ...progress,
       attemptedSitQuietly: true,
@@ -234,6 +253,9 @@ export default function App() {
       }
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
+      }
+      if (interactionCooldownTimeoutRef.current) {
+        clearTimeout(interactionCooldownTimeoutRef.current);
       }
     };
   }, []);
@@ -367,9 +389,9 @@ export default function App() {
           </div>
           <div className="room-footer">
             <div className="action-buttons">
-              <button onClick={handlePet}>Pet</button>
-              <button onClick={handleFeed}>Feed</button>
-              <button onClick={handleSitQuietly}>Sit quietly</button>
+              <button onClick={handlePet} disabled={isInteractionCoolingDown}>Pet</button>
+              <button onClick={handleFeed} disabled={isInteractionCoolingDown}>Feed</button>
+              <button onClick={handleSitQuietly} disabled={isInteractionCoolingDown}>Sit quietly</button>
             </div>
             <button
               className="next-day-room"
