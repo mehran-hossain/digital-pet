@@ -11,6 +11,7 @@ export function PetSprite({
   frameHeight = 32,
   scale = 4,
   fps = 8,
+  startFrame = 0,
   className = "",
 }) {
   const [frameCount, setFrameCount] = useState(1);
@@ -26,7 +27,8 @@ export function PetSprite({
       if (cancelled) return;
       const frames = Math.max(1, Math.floor(img.naturalWidth / frameWidth));
       setFrameCount(frames);
-      setFrame(0);
+      const clampedStart = Math.max(0, Math.min(startFrame, frames - 1));
+      setFrame(clampedStart);
       const detectedRows = Math.max(1, Math.floor(img.naturalHeight / frameHeight));
       setRows(detectedRows);
     };
@@ -35,19 +37,20 @@ export function PetSprite({
     return () => {
       cancelled = true;
     };
-  }, [src, frameWidth]);
+  }, [src, frameWidth, frameHeight, startFrame]);
 
   useEffect(() => {
     if (fps <= 0 || frameCount <= 1) {
-      // Don't animate; stay on the first frame
+      // Don't animate; stay on the configured starting frame.
       return;
     }
+    const firstFrame = Math.max(0, Math.min(startFrame, frameCount - 1));
     const msPerFrame = Math.max(1, Math.round(1000 / fps));
     const id = setInterval(() => {
-      setFrame((f) => (f + 1) % frameCount);
+      setFrame((f) => (f < firstFrame || f >= frameCount - 1 ? firstFrame : f + 1));
     }, msPerFrame);
     return () => clearInterval(id);
-  }, [fps, frameCount]);
+  }, [fps, frameCount, startFrame]);
 
   const style = useMemo(() => {
     const scaledW = frameWidth * scale;

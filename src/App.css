@@ -8,9 +8,9 @@
 
 :root {
   /* Layout sizing (used to keep the room centered even with the chatbox on the right) */
-  --hud-width: 300px;
+  --hud-width: 390px;
   --main-gap: 16px;
-  --hud-y-offset: 48px;
+  --hud-y-offset: 84px;
 }
 
 .logo {
@@ -156,6 +156,12 @@
   font-weight: 800;
 }
 
+.admin-next-day {
+  background-color: #c7ffd6;
+  color: #0c3a1f;
+  font-weight: 800;
+}
+
 .hud {
   width: var(--hud-width);
   height: calc(100vh - 16px - 16px);
@@ -167,6 +173,50 @@
   transform: translateY(var(--hud-y-offset));
 }
 
+.status-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -25px;
+  margin-bottom: 8px;
+}
+
+.status-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.status-meter__label {
+  text-align: left;
+  font-weight: 700;
+  color: #f4efe2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  font-size: 0.94rem;
+}
+
+.status-meter__track {
+  width: 90%;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(250, 250, 250, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+}
+
+.status-meter__fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.status-meter__fill--trust {
+  background: linear-gradient(90deg, #f3c76f 0%, #f3a860 100%);
+}
+
+.status-meter__fill--comfort {
+  background: linear-gradient(90deg, #89d2ff 0%, #5fb2ff 100%);
+}
+
 .action-buttons button {
   background-color: #ffe9a8;
   color: #4b1f00;
@@ -174,7 +224,8 @@
 }
 
 .action-buttons button:disabled,
-.next-day-room:disabled {
+.next-day-room:disabled,
+.admin-next-day:disabled {
   opacity: 0.4;
   filter: grayscale(0.3);
   cursor: not-allowed;
@@ -184,13 +235,14 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
+  flex: 0 0 420px;
+  height: 440px;
   min-height: 0;
 }
 
 /* Keep the chat a bit shorter so the room remains the focal point */
 .message-box {
-  max-height: 420px;
+  max-height: 440px;
 }
 
 .message-log {
@@ -245,6 +297,30 @@
 .message-compose {
   display: flex;
   gap: 8px;
+}
+
+.message-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-chip {
+  background: #f7fbff;
+  color: #1357b2;
+  border: 1px solid #2f76d3;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 600;
+}
+
+.suggestion-chip:hover {
+  background: #e9f3ff;
+}
+
+.suggestion-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .message-input {

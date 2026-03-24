@@ -1,272 +1,215 @@
-import { useMemo, useState, useReducer, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import "./App.css";
 import { PetSprite } from "./components/PetSprite";
 import idleSprite from "./assets/cat animations/Idle.png";
-import idle2Sprite from "./assets/cat animations/Idle2.png";
-import waitingSprite from "./assets/cat animations/Waiting.png";
-import sleepSprite from "./assets/cat animations/Sleep.png";
 import box2Sprite from "./assets/cat animations/Box2.png";
-import petSprite from "./assets/cat animations/Pet.png";
-import eatingSprite from "./assets/cat animations/Eating.png";
-import bathtubSprite from "./assets/cat animations/13Jul2025UpdateBathtab.png";
+import box3IdleSprite from "./assets/cat animations/Box3.png";
 import adoptionSprite from "./assets/cat animations/adoption.png";
 import roomBackground from "./assets/cat animations/ExampleRooms/ExampleRoom 2.png";
 
-const initialPet = {
-  mood: "neutral",
-  lastInteraction: Date.now(),
-  tricksUnlocked: ["sit"],
-  message: "Hi 👋",
-  currentTrick: null,
-};
+const GENTLE_SUGGESTIONS = [
+  "It's okay",
+  "I'll stay here",
+  "Take your time",
+  "You are safe with me",
+  "I'm here when you're ready",
+  "I'm not going anywhere",
+];
 
-function petReducer(pet, action) {
-  switch (action.type) {
-    case "PET":
-      return { ...pet, mood: "happy", lastInteraction: Date.now(), message: "Purr! 😊" };
-
-    case "FEED":
-      return { ...pet, mood: "happy", lastInteraction: Date.now(), message: "Yum! 🍪" };
-
-    case "TIME_PASS": {
-      // if no interaction for 10 seconds, go neutral
-      const now = Date.now();
-      const idleMs = now - pet.lastInteraction;
-      if (idleMs > 6000) {
-        return { ...pet, mood: "neutral", message: "Just chilling." };
-      }
-      return pet;
-    }
-
-    case "BATHE":
-      return {
-        ...pet,
-        mood: "happy",
-        lastInteraction: Date.now(),
-        message: "Splish splash! 🛁",
-      };
-
-    case "TEACH_TRICK": {
-      const trick = action.trick; // e.g. "playDead"
-      if (pet.tricksUnlocked.includes(trick)) return pet;
-      return {
-        ...pet,
-        tricksUnlocked: [...pet.tricksUnlocked, trick],
-        message: `Learned ${trick}! 🎉`,
-      };
-    }
-
-    case "DO_TRICK": {
-      const trick = action.trick;
-      return {
-        ...pet,
-        lastInteraction: Date.now(),
-        message: `Doing ${trick}! 🎭`,
-        currentTrick: trick,
-      };
-    }
-
-    case "CLEAR_TRICK": {
-      return {
-        ...pet,
-        currentTrick: null,
-      };
-    }
-
-    default:
-      return pet;
+function getSuggestionsForDay(day) {
+  if (day % 2 === 1) {
+    return GENTLE_SUGGESTIONS.slice(0, 3);
   }
+  return GENTLE_SUGGESTIONS.slice(3, 6);
+}
+
+const HARSH_WORDS = ["stupid", "bad", "hate", "shut up", "idiot", "dumb"];
+
+function createProgressState() {
+  return {
+    dialogueCount: 0,
+    gentleDialogueCount: 0,
+    attemptedFeed: false,
+    attemptedSitQuietly: false,
+    spendTimeCount: 0,
+  };
+}
+
+function clamp(num, min, max) {
+  return Math.max(min, Math.min(max, num));
+}
+
+function getTrustLabel(level) {
+  if (level === 1) return "Very low";
+  if (level === 2) return "Warming up";
+  if (level === 3) return "Growing";
+  return "Warming up";
+}
+
+function getComfortLabel(level) {
+  if (level === 1) return "Scared";
+  if (level === 2) return "Cautious";
+  if (level === 3) return "Calmer";
+  return "Cautious";
 }
 
 export default function App() {
   const [started, setStarted] = useState(false);
   const [adopterName, setAdopterName] = useState("");
-  const [pet, dispatch] = useReducer(petReducer, initialPet);
   const [day, setDay] = useState(1);
+  const [trustLevel, setTrustLevel] = useState(1);
+  const [pendingTrustLevel, setPendingTrustLevel] = useState(null);
+  const [progress, setProgress] = useState(() => createProgressState());
   const dayRef = useRef(day);
   const [currentSprite, setCurrentSprite] = useState(idleSprite);
-  const [day1Attempts, setDay1Attempts] = useState({
-    pet: false,
-    feed: false,
-    bathe: false,
-  });
   const animationTimeoutRef = useRef(null);
+  const trust2SitAnimationTimeoutRef = useRef(null);
+  const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const [messages, setMessages] = useState(() => [
     {
       from: "system",
-      text: "Meowzart appears afraid and refuses to leave the box",
+      text: "Meowzart appears afraid and refuses to leave the box.",
       ts: Date.now(),
     },
   ]);
   const [draftMessage, setDraftMessage] = useState("");
+  const [quickSuggestions, setQuickSuggestions] = useState(() => getSuggestionsForDay(1));
+  const [isWaitingForReply, setIsWaitingForReply] = useState(false);
+  const replyTimeoutRef = useRef(null);
 
   const ANIMATION_DURATION_MS = 4000;
   const FADE_OUT_MS = 280;
   const FADE_IN_MS = 280;
+  const REPLY_DELAY_MS = 1200;
 
   const dayIdleSprite = useMemo(() => {
-    if (day === 1) {
-      return box2Sprite;
+    if (trustLevel === 1) return box2Sprite;
+    if (trustLevel === 2) return box2Sprite;
+    if (trustLevel === 3) return box3IdleSprite;
+    return idleSprite;
+  }, [trustLevel]);
+
+  const meters = useMemo(() => {
+    const trustBase = trustLevel === 1 ? 15 : 30;
+    const comfortBase = trustLevel === 1 ? 20 : trustLevel === 2 ? 36 : 50;
+    return {
+      trust: {
+        value: clamp(Math.round(trustLevel === 3 ? 45 : trustBase), 1, 100),
+        label: getTrustLabel(trustLevel),
+      },
+      comfort: {
+        value: clamp(Math.round(comfortBase), 1, 100),
+        label: getComfortLabel(trustLevel),
+      },
+    };
+  }, [trustLevel]);
+
+  const isGentleTone = (text) => {
+    const normalized = text.toLowerCase();
+    return !HARSH_WORDS.some((word) => normalized.includes(word));
+  };
+
+  const maybeQueueLevelUp = (updatedProgress) => {
+    if (pendingTrustLevel) return;
+    if (trustLevel === 1) {
+      const canProgress =
+        updatedProgress.gentleDialogueCount >= 3 &&
+        updatedProgress.attemptedFeed &&
+        updatedProgress.attemptedSitQuietly;
+      if (canProgress) {
+        setPendingTrustLevel(2);
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: "system",
+            text: "State 2 is ready. Advance to next day to activate it.",
+            ts: Date.now(),
+          },
+        ]);
+      }
+      return;
     }
-    const options = [idleSprite, idle2Sprite, waitingSprite, sleepSprite];
-    const idx = (Math.max(1, day) - 1) % options.length;
-    return options[idx];
-  }, [day]);
+
+    if (trustLevel === 2) {
+      const canProgress =
+        updatedProgress.dialogueCount >= 3 &&
+        updatedProgress.spendTimeCount >= 2;
+      if (canProgress) {
+        setPendingTrustLevel(3);
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: "system",
+            text: "State 3 is ready. Advance to next day to activate it.",
+            ts: Date.now(),
+          },
+        ]);
+      }
+    }
+  };
 
   useEffect(() => {
     dayRef.current = day;
   }, [day]);
 
   useEffect(() => {
-    // When the day changes (or app starts), ensure we render the correct idle
-    // unless an animation is currently playing.
+    setQuickSuggestions(getSuggestionsForDay(day));
+    setIsWaitingForReply(false);
+    if (replyTimeoutRef.current) {
+      clearTimeout(replyTimeoutRef.current);
+      replyTimeoutRef.current = null;
+    }
+  }, [day, trustLevel]);
+
+  useEffect(() => {
     if (animationTimeoutRef.current) return;
     setCurrentSprite(dayIdleSprite);
   }, [dayIdleSprite]);
 
-  const playAnimation = (sprite) => {
-    setCurrentSprite(sprite);
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-    }
-    animationTimeoutRef.current = setTimeout(() => {
-      setCurrentSprite(dayIdleSprite);
-      animationTimeoutRef.current = null;
-    }, ANIMATION_DURATION_MS);
+  const pushSystem = (text) => {
+    setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
   };
 
   const handlePet = () => {
-    if (day === 1) {
-      if (day1Attempts.pet) return;
-
-      const nextAttempts = { ...day1Attempts, pet: true };
-      setDay1Attempts(nextAttempts);
-
-        setMessages((msgs) => [
-          ...msgs,
-          { from: "system", text: "Meowzart refuses", ts: Date.now() },
-          ...(nextAttempts.pet && nextAttempts.feed && nextAttempts.bathe
-            ? [
-                {
-                  from: "system",
-                  text: "maybe Meowzart will be more comfortable tomorrow",
-                  ts: Date.now(),
-                },
-              ]
-            : []),
-        ]);
-
-      return;
-    }
-    if (day === 2) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "system", text: "Meowzart refuses", ts: Date.now() },
-      ]);
-      return;
-    }
-    dispatch({ type: "PET" });
-    playAnimation(petSprite);
-
-    if (day === 3) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "meowzart", text: "Meowzart: ..purrr....<3", ts: Date.now() },
-      ]);
-    }
+    pushSystem("Meowzart stays hidden in the box and avoids touch.");
   };
 
   const handleFeed = () => {
-    if (day === 1) {
-      if (day1Attempts.feed) return;
-
-      const nextAttempts = { ...day1Attempts, feed: true };
-      setDay1Attempts(nextAttempts);
-
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "system", text: "Meowzart refuses", ts: Date.now() },
-        ...(nextAttempts.pet && nextAttempts.feed && nextAttempts.bathe
-          ? [
-              {
-                from: "system",
-                text: "maybe Meowzart will be more comfortable tomorrow",
-                ts: Date.now(),
-              },
-            ]
-          : []),
-      ]);
-
-      return;
-    }
-    if (day === 2) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "system", text: "Meowzart refuses", ts: Date.now() },
-      ]);
-      return;
-    }
-    dispatch({ type: "FEED" });
-    playAnimation(eatingSprite);
-
-    if (day === 3) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "meowzart", text: "Meowzart: CHOMPCHOMPCHOMP", ts: Date.now() },
-      ]);
-    }
+    const nextProgress = { ...progress, attemptedFeed: true };
+    setProgress(nextProgress);
+    pushSystem("You place food nearby, but Meowzart refuses.");
+    maybeQueueLevelUp(nextProgress);
   };
 
-  const handleBathe = () => {
-    if (day === 1) {
-      if (day1Attempts.bathe) return;
-
-      const nextAttempts = { ...day1Attempts, bathe: true };
-      setDay1Attempts(nextAttempts);
-
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "system", text: "Meowzart refuses", ts: Date.now() },
-        ...(nextAttempts.pet && nextAttempts.feed && nextAttempts.bathe
-          ? [
-              {
-                from: "system",
-                text: "maybe Meowzart will be more comfortable tomorrow",
-                ts: Date.now(),
-              },
-            ]
-          : []),
-      ]);
-
-      return;
+  const handleSitQuietly = () => {
+    const nextProgress = {
+      ...progress,
+      attemptedSitQuietly: true,
+      spendTimeCount: progress.spendTimeCount + 1,
+    };
+    setProgress(nextProgress);
+    if (trustLevel === 2) {
+      setIsTrust2SitAnimationActive(true);
+      if (trust2SitAnimationTimeoutRef.current) {
+        clearTimeout(trust2SitAnimationTimeoutRef.current);
+      }
+      trust2SitAnimationTimeoutRef.current = setTimeout(() => {
+        setIsTrust2SitAnimationActive(false);
+        trust2SitAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
     }
-    if (day === 2) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "system", text: "Meowzart refuses", ts: Date.now() },
-      ]);
-      return;
-    }
-    dispatch({ type: "BATHE" });
-    playAnimation(bathtubSprite);
+    pushSystem("You sit quietly near the box. Meowzart watches you cautiously.");
+    maybeQueueLevelUp(nextProgress);
   };
 
-  const isBathSprite = currentSprite === bathtubSprite;
-  const currentFrameWidth = isBathSprite ? 64 : 32;
-  const currentFrameHeight = isBathSprite ? 43 : 32;
-
-  // Preload animation sprite sheets so transitions feel smoother
+  // Preload sprite sheets so transitions feel smoother
   useEffect(() => {
     const images = [
       idleSprite,
-      idle2Sprite,
-      waitingSprite,
-      sleepSprite,
-      petSprite,
-      eatingSprite,
-      bathtubSprite,
+      box2Sprite,
+      box3IdleSprite,
       adoptionSprite,
     ].map((src) => {
       const img = new Image();
@@ -281,42 +224,70 @@ export default function App() {
     };
   }, []);
 
-  const handleSendMessage = () => {
-    const text = draftMessage.trim();
+  useEffect(() => {
+    return () => {
+      if (replyTimeoutRef.current) {
+        clearTimeout(replyTimeoutRef.current);
+      }
+      if (trust2SitAnimationTimeoutRef.current) {
+        clearTimeout(trust2SitAnimationTimeoutRef.current);
+      }
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSendMessage = (suggestedText, fromSuggestion = false) => {
+    const text = (suggestedText ?? draftMessage).trim();
     if (!text) return;
-    if (day === 1) {
-      const now = Date.now();
-      // Show the user's message immediately
-      setMessages((prev) => [...prev, { from: "you", text, ts: now }]);
-      // Delay Meowzart's default reply by ~2 seconds, and only if it's still Day 1
-      window.setTimeout(() => {
-        if (dayRef.current !== 1) return;
-        setMessages((prev) => [
-          ...prev,
-          { from: "meowzart", text: "Meowzart: ...", ts: Date.now() },
-        ]);
-      }, 2000);
-    } else if (day === 2) {
-      const now = Date.now();
-      setMessages((prev) => [...prev, { from: "you", text, ts: now }]);
-      window.setTimeout(() => {
-        if (dayRef.current !== 2) return;
-        setMessages((prev) => [
-          ...prev,
-          { from: "meowzart", text: "Meowzart: Meow", ts: Date.now() },
-        ]);
-      }, 2000);
-    } else {
-      setMessages((prev) => [...prev, { from: "you", text, ts: Date.now() }]);
+    if (isWaitingForReply) return;
+
+    if (fromSuggestion) {
+      setQuickSuggestions((prev) => prev.filter((suggestion) => suggestion !== text));
     }
+    setMessages((prev) => [...prev, { from: "you", text, ts: Date.now() }]);
+    setIsWaitingForReply(true);
+    const nextProgress = {
+      ...progress,
+      dialogueCount: progress.dialogueCount + 1,
+      gentleDialogueCount: progress.gentleDialogueCount + (isGentleTone(text) ? 1 : 0),
+    };
+    setProgress(nextProgress);
+    maybeQueueLevelUp(nextProgress);
+
+    replyTimeoutRef.current = window.setTimeout(() => {
+      const reaction = trustLevel === 1 ? "Meowzart: ..." : "Meowzart: meow.";
+      setMessages((prev) => [...prev, { from: "meowzart", text: reaction, ts: Date.now() }]);
+      setIsWaitingForReply(false);
+      replyTimeoutRef.current = null;
+    }, REPLY_DELAY_MS);
+
     setDraftMessage("");
   };
 
-  const handleNextDay = () => {
+  const isMessageLocked = isWaitingForReply;
+
+  const handleSendMessageKeyDown = (e) => {
+    if (e.key !== "Enter") return;
+    if (isMessageLocked) return;
+    handleSendMessage();
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    if (isMessageLocked) return;
+    handleSendMessage(suggestion, true);
+  };
+
+  const handleSendClick = () => {
+    if (isMessageLocked) return;
+    handleSendMessage();
+  };
+
+  const handleNextDay = (forceAdvance = false) => {
     if (isFading) return;
     setIsFading(true);
 
-    // Clear any in-flight animation so the day switch is deterministic.
     if (animationTimeoutRef.current) {
       clearTimeout(animationTimeoutRef.current);
       animationTimeoutRef.current = null;
@@ -325,51 +296,26 @@ export default function App() {
     window.setTimeout(() => {
       const nextDay = dayRef.current + 1;
       setDay(nextDay);
-      // Reset Day 1 attempts once we move on, just to keep state clean
-      if (nextDay !== 1) {
-        setDay1Attempts({ pet: false, feed: false, bathe: false });
+
+      let dayMessage = `------Day ${nextDay}------`;
+
+      if (forceAdvance) {
+        const nextTrustLevel = Math.min(trustLevel + 1, 10);
+        setTrustLevel(nextTrustLevel);
+        setPendingTrustLevel(null);
+        setProgress(createProgressState());
+        dayMessage += ` Trust level is now ${nextTrustLevel}.`;
+      } else if (pendingTrustLevel) {
+        setTrustLevel(pendingTrustLevel);
+        setPendingTrustLevel(null);
+        setProgress(createProgressState());
+        dayMessage += ` Trust level is now ${pendingTrustLevel}.`;
       }
-      const baseMessages = [
-        {
-          from: "day",
-          text: `------Day ${nextDay}------`,
-          ts: Date.now(),
-        },
-      ];
-      // On Day 3, add a welcoming system line
-      const day3Extra =
-        nextDay === 3
-          ? [
-              {
-                from: "system",
-                text: "Meowzart has been waiting for you!",
-                ts: Date.now() + 1,
-              },
-            ]
-          : [];
-      // Wipe previous chat and start fresh with the new day divider (+ optional extra)
-      setMessages([...baseMessages, ...day3Extra]);
-      // `dayIdleSprite` updates via `day`, and effect will set `currentSprite`
+      setMessages([{ from: "day", text: dayMessage, ts: Date.now() }]);
+
       window.setTimeout(() => setIsFading(false), FADE_IN_MS);
     }, FADE_OUT_MS);
   };
-
-  // Time-based mood reset
-  useEffect(() => {
-    if (!started) return;
-    const id = setInterval(() => dispatch({ type: "TIME_PASS" }), 7000);
-    return () => clearInterval(id);
-  }, [started]);
-
-  // Clear trick after 1 second
-  useEffect(() => {
-    if (pet.currentTrick) {
-      const timer = setTimeout(() => {
-        dispatch({ type: "CLEAR_TRICK" });
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
-  }, [pet.currentTrick]);
 
   if (!started) {
     return (
@@ -406,53 +352,65 @@ export default function App() {
             style={{ backgroundImage: `url(${roomBackground})` }}
           >
             <div className="day-badge" aria-label="day counter">
-              Day {day}
+              Day {day} | Trust {trustLevel}
             </div>
             <PetSprite
               className="pet-sprite"
               src={currentSprite}
               alt="cat"
-              frameWidth={currentFrameWidth}
-              frameHeight={currentFrameHeight}
+              frameWidth={32}
+              frameHeight={32}
               scale={4}
-              fps={day === 1 ? 0 : 8}
+              fps={trustLevel === 2 ? (isTrust2SitAnimationActive ? 8 : 0) : trustLevel === 1 ? 0 : 8}
+              startFrame={trustLevel === 2 && currentSprite === box2Sprite && isTrust2SitAnimationActive ? 3 : 0}
             />
           </div>
           <div className="room-footer">
             <div className="action-buttons">
-              <button
-                onClick={handlePet}
-                disabled={day === 1 && day1Attempts.pet}
-              >
-                Pet
-              </button>
-              <button
-                onClick={handleFeed}
-                disabled={day === 1 && day1Attempts.feed}
-              >
-                Feed
-              </button>
-              <button
-                onClick={handleBathe}
-                disabled={day === 1 && day1Attempts.bathe}
-              >
-                Bathe
-              </button>
+              <button onClick={handlePet}>Pet</button>
+              <button onClick={handleFeed}>Feed</button>
+              <button onClick={handleSitQuietly}>Sit quietly</button>
             </div>
             <button
               className="next-day-room"
-              onClick={handleNextDay}
-              disabled={
-                day === 1 &&
-                !(day1Attempts.pet && day1Attempts.feed && day1Attempts.bathe)
-              }
+              onClick={() => handleNextDay(false)}
+              disabled={isFading}
             >
               Next day
+            </button>
+            <button
+              className="admin-next-day"
+              onClick={() => handleNextDay(true)}
+              disabled={isFading}
+              title="Testing only: next day + trust level +1"
+            >
+              Admin Next Trust
             </button>
           </div>
         </div>
 
         <div className="hud">
+          <div className="status-meters" aria-label="trust and comfort meters">
+            <div className="status-meter">
+              <div className="status-meter__label">
+                  Trust L{trustLevel} [{meters.trust.label}]
+              </div>
+              <div className="status-meter__track" role="img" aria-label={`Trust ${meters.trust.value} percent`}>
+                <div className="status-meter__fill status-meter__fill--trust" style={{ width: `${meters.trust.value}%` }} />
+              </div>
+            </div>
+            <div className="status-meter">
+              <div className="status-meter__label">
+                Comfort [{meters.comfort.label}]
+              </div>
+              <div className="status-meter__track" role="img" aria-label={`Comfort ${meters.comfort.value} percent`}>
+                <div
+                  className="status-meter__fill status-meter__fill--comfort"
+                  style={{ width: `${meters.comfort.value}%` }}
+                />
+              </div>
+            </div>
+          </div>
           <div className="message-box">
             <div className="message-log" aria-label="messages">
               {messages.slice(-6).map((m) => (
@@ -464,17 +422,28 @@ export default function App() {
                 </div>
               ))}
             </div>
+            <div className="message-suggestions" aria-label="quick message suggestions">
+              {quickSuggestions.map((suggestion) => (
+                <button
+                  key={`${day}-${trustLevel}-${suggestion}`}
+                  type="button"
+                  className="suggestion-chip"
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  disabled={isMessageLocked}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
             <div className="message-compose">
               <input
                 value={draftMessage}
                 onChange={(e) => setDraftMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSendMessage();
-                }}
+                onKeyDown={handleSendMessageKeyDown}
                 placeholder="Send a message…"
                 className="message-input"
               />
-              <button onClick={handleSendMessage} className="send-button">
+              <button onClick={handleSendClick} className="send-button" disabled={isMessageLocked}>
                 Send
               </button>
             </div>
