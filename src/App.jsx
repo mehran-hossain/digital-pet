@@ -1,57 +1,29 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import "./App.css";
-import { PetSprite } from "./components/PetSprite";
+import { calculateTrustMeter, checkTrustProgression } from "./Trust";
+import { calculateComfortMeter } from "./Comfort";
+import { Feed } from "./Feed";
+import { Sit } from "./Sit";
+import { Talk } from "./Talk";
+import { Pet } from "./Pet";
+import { StatusMeters } from "./StatusMeters";
+import {
+  ANIMATION_DURATION_MS,
+  FADE_OUT_MS,
+  FADE_IN_MS,
+  REPLY_DELAY_MS,
+  INTERACTION_COOLDOWN_MS,
+  getSuggestionsForDay,
+  createProgressState,
+  isGentleTone,
+} from "./utils";
 import idleSprite from "./assets/cat animations/Idle.png";
 import box2Sprite from "./assets/cat animations/Box2.png";
 import box3IdleSprite from "./assets/cat animations/Box3.png";
+import petSprite from "./assets/cat animations/Pet.png";
+import eatingSprite from "./assets/cat animations/Eating.png";
 import adoptionSprite from "./assets/cat animations/adoption.png";
 import roomBackground from "./assets/cat animations/ExampleRooms/ExampleRoom 2.png";
-
-const GENTLE_SUGGESTIONS = [
-  "It's okay",
-  "I'll stay here",
-  "Take your time",
-  "You are safe with me",
-  "I'm here when you're ready",
-  "I'm not going anywhere",
-];
-
-function getSuggestionsForDay(day) {
-  if (day % 2 === 1) {
-    return GENTLE_SUGGESTIONS.slice(0, 3);
-  }
-  return GENTLE_SUGGESTIONS.slice(3, 6);
-}
-
-const HARSH_WORDS = ["stupid", "bad", "hate", "shut up", "idiot", "dumb"];
-
-function createProgressState() {
-  return {
-    dialogueCount: 0,
-    gentleDialogueCount: 0,
-    attemptedFeed: false,
-    attemptedSitQuietly: false,
-    spendTimeCount: 0,
-  };
-}
-
-function clamp(num, min, max) {
-  return Math.max(min, Math.min(max, num));
-}
-
-function getTrustLabel(level) {
-  if (level === 1) return "Very low";
-  if (level === 2) return "Warming up";
-  if (level === 3) return "Growing";
-  return "Warming up";
-}
-
-function getComfortLabel(level) {
-  if (level === 1) return "Scared";
-  if (level === 2) return "Cautious";
-  if (level === 3) return "Calmer";
-  return "Cautious";
-}
 
 export default function App() {
   const [started, setStarted] = useState(false);
@@ -64,8 +36,11 @@ export default function App() {
   const [currentSprite, setCurrentSprite] = useState(idleSprite);
   const animationTimeoutRef = useRef(null);
   const trust2SitAnimationTimeoutRef = useRef(null);
+  const petAnimationTimeoutRef = useRef(null);
   const interactionCooldownTimeoutRef = useRef(null);
   const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] = useState(false);
+  const [isPetAnimationActive, setIsPetAnimationActive] = useState(false);
+  const [isFeedAnimationActive, setIsFeedAnimationActive] = useState(false);
   const [isInteractionCoolingDown, setIsInteractionCoolingDown] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
@@ -81,12 +56,6 @@ export default function App() {
   const [isWaitingForReply, setIsWaitingForReply] = useState(false);
   const replyTimeoutRef = useRef(null);
 
-  const ANIMATION_DURATION_MS = 4000;
-  const FADE_OUT_MS = 280;
-  const FADE_IN_MS = 280;
-  const REPLY_DELAY_MS = 1200;
-  const INTERACTION_COOLDOWN_MS = 700;
-
   const dayIdleSprite = useMemo(() => {
     if (trustLevel === 1) return box2Sprite;
     if (trustLevel === 2) return box2Sprite;
@@ -95,61 +64,24 @@ export default function App() {
   }, [trustLevel]);
 
   const meters = useMemo(() => {
-    const trustBase = trustLevel === 1 ? 15 : 30;
-    const comfortBase = trustLevel === 1 ? 20 : trustLevel === 2 ? 36 : 50;
     return {
-      trust: {
-        value: clamp(Math.round(trustLevel === 3 ? 45 : trustBase), 1, 100),
-        label: getTrustLabel(trustLevel),
-      },
-      comfort: {
-        value: clamp(Math.round(comfortBase), 1, 100),
-        label: getComfortLabel(trustLevel),
-      },
+      trust: calculateTrustMeter(trustLevel),
+      comfort: calculateComfortMeter(trustLevel),
     };
   }, [trustLevel]);
 
-  const isGentleTone = (text) => {
-    const normalized = text.toLowerCase();
-    return !HARSH_WORDS.some((word) => normalized.includes(word));
-  };
-
   const maybeQueueLevelUp = (updatedProgress) => {
-    if (pendingTrustLevel) return;
-    if (trustLevel === 1) {
-      const canProgress =
-        updatedProgress.gentleDialogueCount >= 3 &&
-        updatedProgress.attemptedFeed &&
-        updatedProgress.attemptedSitQuietly;
-      if (canProgress) {
-        setPendingTrustLevel(2);
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: "system",
-            text: "State 2 is ready. Advance to next day to activate it.",
-            ts: Date.now(),
-          },
-        ]);
-      }
-      return;
-    }
-
-    if (trustLevel === 2) {
-      const canProgress =
-        updatedProgress.dialogueCount >= 3 &&
-        updatedProgress.spendTimeCount >= 2;
-      if (canProgress) {
-        setPendingTrustLevel(3);
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: "system",
-            text: "State 3 is ready. Advance to next day to activate it.",
-            ts: Date.now(),
-          },
-        ]);
-      }
+    const progression = checkTrustProgression(trustLevel, updatedProgress);
+    if (progression) {
+      setPendingTrustLevel(progression.nextTrustLevel);
+      setMessages((prev) => [
+        ...prev,
+        {
+          from: "system",
+          text: progression.message,
+          ts: Date.now(),
+        },
+      ]);
     }
   };
 
@@ -175,7 +107,7 @@ export default function App() {
     setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
   };
 
-  const beginInteractionCooldown = () => {
+  const beginInteractionCooldown = (durationMs = INTERACTION_COOLDOWN_MS) => {
     if (isInteractionCoolingDown) return false;
     setIsInteractionCoolingDown(true);
     if (interactionCooldownTimeoutRef.current) {
@@ -184,32 +116,57 @@ export default function App() {
     interactionCooldownTimeoutRef.current = window.setTimeout(() => {
       setIsInteractionCoolingDown(false);
       interactionCooldownTimeoutRef.current = null;
-    }, INTERACTION_COOLDOWN_MS);
+    }, durationMs);
     return true;
   };
 
   const handlePet = () => {
-    if (!beginInteractionCooldown()) return;
-    pushSystem("Meowzart stays hidden in the box and avoids touch.");
+    const willAnimate = trustLevel >= 4;
+    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
+    if (willAnimate) {
+      pushSystem("You pet Meowzart gently. Meowzart purrs!");
+      setIsPetAnimationActive(true);
+      if (petAnimationTimeoutRef.current) {
+        clearTimeout(petAnimationTimeoutRef.current);
+      }
+      petAnimationTimeoutRef.current = setTimeout(() => {
+        setIsPetAnimationActive(false);
+        petAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
+    }
+    else {
+      pushSystem("Meowzart stays hidden in the box and avoids touch.");
+    }
   };
 
   const handleFeed = () => {
-    if (!beginInteractionCooldown()) return;
+    const willAnimate = trustLevel >= 4;
+    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
     const nextProgress = { ...progress, attemptedFeed: true };
     setProgress(nextProgress);
-    pushSystem("You place food nearby, but Meowzart refuses.");
+    if (willAnimate) {
+      pushSystem("Meowzart happily eats the food you offer. Yum!");
+    }
+    else {
+      pushSystem("You place food nearby, but Meowzart refuses.");
+    }
     maybeQueueLevelUp(nextProgress);
   };
 
+  const handleFeedAnimationStateChange = (isAnimating) => {
+    setIsFeedAnimationActive(isAnimating);
+  };
+
   const handleSitQuietly = () => {
-    if (!beginInteractionCooldown()) return;
+    const willAnimate = trustLevel === 2;
+    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
     const nextProgress = {
       ...progress,
       attemptedSitQuietly: true,
       spendTimeCount: progress.spendTimeCount + 1,
     };
     setProgress(nextProgress);
-    if (trustLevel === 2) {
+    if (willAnimate) {
       setIsTrust2SitAnimationActive(true);
       if (trust2SitAnimationTimeoutRef.current) {
         clearTimeout(trust2SitAnimationTimeoutRef.current);
@@ -229,6 +186,8 @@ export default function App() {
       idleSprite,
       box2Sprite,
       box3IdleSprite,
+      petSprite,
+      eatingSprite,
       adoptionSprite,
     ].map((src) => {
       const img = new Image();
@@ -250,6 +209,9 @@ export default function App() {
       }
       if (trust2SitAnimationTimeoutRef.current) {
         clearTimeout(trust2SitAnimationTimeoutRef.current);
+      }
+      if (petAnimationTimeoutRef.current) {
+        clearTimeout(petAnimationTimeoutRef.current);
       }
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
@@ -376,22 +338,26 @@ export default function App() {
             <div className="day-badge" aria-label="day counter">
               Day {day} | Trust {trustLevel}
             </div>
-            <PetSprite
-              className="pet-sprite"
-              src={currentSprite}
-              alt="cat"
-              frameWidth={32}
-              frameHeight={32}
-              scale={4}
-              fps={trustLevel === 2 ? (isTrust2SitAnimationActive ? 8 : 0) : trustLevel === 1 ? 0 : 8}
-              startFrame={trustLevel === 2 && currentSprite === box2Sprite && isTrust2SitAnimationActive ? 3 : 0}
+            <Pet
+              currentSprite={currentSprite}
+              trustLevel={trustLevel}
+              isTrust2SitAnimationActive={isTrust2SitAnimationActive}
+              isPetAnimationActive={isPetAnimationActive}
+              petSprite={petSprite}
+              isFeedAnimationActive={isFeedAnimationActive}
+              eatingSprite={eatingSprite}
             />
           </div>
           <div className="room-footer">
             <div className="action-buttons">
               <button onClick={handlePet} disabled={isInteractionCoolingDown}>Pet</button>
-              <button onClick={handleFeed} disabled={isInteractionCoolingDown}>Feed</button>
-              <button onClick={handleSitQuietly} disabled={isInteractionCoolingDown}>Sit quietly</button>
+              <Feed 
+                onFeed={handleFeed} 
+                disabled={isInteractionCoolingDown} 
+                trustLevel={trustLevel}
+                onAnimationStateChange={handleFeedAnimationStateChange}
+              />
+              <Sit onSitQuietly={handleSitQuietly} disabled={isInteractionCoolingDown} />
             </div>
             <button
               className="next-day-room"
@@ -412,64 +378,23 @@ export default function App() {
         </div>
 
         <div className="hud">
-          <div className="status-meters" aria-label="trust and comfort meters">
-            <div className="status-meter">
-              <div className="status-meter__label">
-                  Trust L{trustLevel} [{meters.trust.label}]
-              </div>
-              <div className="status-meter__track" role="img" aria-label={`Trust ${meters.trust.value} percent`}>
-                <div className="status-meter__fill status-meter__fill--trust" style={{ width: `${meters.trust.value}%` }} />
-              </div>
-            </div>
-            <div className="status-meter">
-              <div className="status-meter__label">
-                Comfort [{meters.comfort.label}]
-              </div>
-              <div className="status-meter__track" role="img" aria-label={`Comfort ${meters.comfort.value} percent`}>
-                <div
-                  className="status-meter__fill status-meter__fill--comfort"
-                  style={{ width: `${meters.comfort.value}%` }}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="message-box">
-            <div className="message-log" aria-label="messages">
-              {messages.slice(-6).map((m) => (
-                <div
-                  key={`${m.ts}-${m.from}-${m.text}`}
-                  className={`message message--${m.from}`}
-                >
-                  {m.text}
-                </div>
-              ))}
-            </div>
-            <div className="message-suggestions" aria-label="quick message suggestions">
-              {quickSuggestions.map((suggestion) => (
-                <button
-                  key={`${day}-${trustLevel}-${suggestion}`}
-                  type="button"
-                  className="suggestion-chip"
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  disabled={isMessageLocked}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-            <div className="message-compose">
-              <input
-                value={draftMessage}
-                onChange={(e) => setDraftMessage(e.target.value)}
-                onKeyDown={handleSendMessageKeyDown}
-                placeholder="Send a message…"
-                className="message-input"
-              />
-              <button onClick={handleSendClick} className="send-button" disabled={isMessageLocked}>
-                Send
-              </button>
-            </div>
-          </div>
+          <StatusMeters
+            trustLevel={trustLevel}
+            trustLabel={meters.trust.label}
+            trustValue={meters.trust.value}
+            comfortLabel={meters.comfort.label}
+            comfortValue={meters.comfort.value}
+          />
+          <Talk
+            messages={messages}
+            quickSuggestions={quickSuggestions}
+            draftMessage={draftMessage}
+            onDraftChange={setDraftMessage}
+            onSendMessage={handleSendMessage}
+            onSuggestionClick={handleSuggestionClick}
+            isLocked={isMessageLocked}
+            onKeyDown={handleSendMessageKeyDown}
+          />
         </div>
       </div>
     </div>
