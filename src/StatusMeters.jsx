@@ -3,7 +3,7 @@ export function StatusMeters({ trustLevel, trustLabel, trustValue, comfortLabel,
     <div className="status-meters" aria-label="trust and comfort meters">
       <div className="status-meter">
         <div className="status-meter__label">
-          Trust L{trustLevel} [{trustLabel}]
+          Trust [{trustLabel}]
         </div>
         <div
           className="status-meter__track"

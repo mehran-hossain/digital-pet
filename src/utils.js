@@ -32,6 +32,11 @@ export function createProgressState() {
     attemptedFeed: false,
     attemptedSitQuietly: false,
     spendTimeCount: 0,
+
+    // negative progression tracker
+    harshDialogueCount: 0,
+    ignoredDay: false,
+    forcedTouchCount: 0,
   };
 }
 
@@ -43,3 +48,4 @@ export function isGentleTone(text) {
   const normalized = text.toLowerCase();
   return !HARSH_WORDS.some((word) => normalized.includes(word));
 }
+

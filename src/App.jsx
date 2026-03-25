@@ -1,6 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import "./App.css";
-import { calculateTrustMeter, checkTrustProgression } from "./Trust";
+import {
+  calculateTrustMeter,
+  checkTrustProgression,
+  checkTrustRegression,
+} from "./Trust";
 import { calculateComfortMeter } from "./Comfort";
 import { Feed } from "./Feed";
 import { Sit } from "./Sit";
@@ -17,6 +20,8 @@ import {
   createProgressState,
   isGentleTone,
 } from "./utils";
+import "./App.css";
+
 import idleSprite from "./assets/cat animations/Idle.png";
 import box2Sprite from "./assets/cat animations/Box2.png";
 import box3IdleSprite from "./assets/cat animations/Box3.png";
@@ -32,16 +37,21 @@ export default function App() {
   const [trustLevel, setTrustLevel] = useState(1);
   const [pendingTrustLevel, setPendingTrustLevel] = useState(null);
   const [progress, setProgress] = useState(() => createProgressState());
+
   const dayRef = useRef(day);
-  const [currentSprite, setCurrentSprite] = useState(idleSprite);
   const animationTimeoutRef = useRef(null);
   const trust2SitAnimationTimeoutRef = useRef(null);
   const petAnimationTimeoutRef = useRef(null);
   const interactionCooldownTimeoutRef = useRef(null);
-  const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] = useState(false);
+  const replyTimeoutRef = useRef(null);
+
+  const [currentSprite, setCurrentSprite] = useState(idleSprite);
+  const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] =
+    useState(false);
   const [isPetAnimationActive, setIsPetAnimationActive] = useState(false);
   const [isFeedAnimationActive, setIsFeedAnimationActive] = useState(false);
-  const [isInteractionCoolingDown, setIsInteractionCoolingDown] = useState(false);
+  const [isInteractionCoolingDown, setIsInteractionCoolingDown] =
+    useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const [messages, setMessages] = useState(() => [
@@ -51,10 +61,12 @@ export default function App() {
       ts: Date.now(),
     },
   ]);
+
   const [draftMessage, setDraftMessage] = useState("");
-  const [quickSuggestions, setQuickSuggestions] = useState(() => getSuggestionsForDay(1));
+  const [quickSuggestions, setQuickSuggestions] = useState(() =>
+    getSuggestionsForDay(1)
+  );
   const [isWaitingForReply, setIsWaitingForReply] = useState(false);
-  const replyTimeoutRef = useRef(null);
 
   const dayIdleSprite = useMemo(() => {
     if (trustLevel === 1) return box2Sprite;
@@ -92,6 +104,7 @@ export default function App() {
   useEffect(() => {
     setQuickSuggestions(getSuggestionsForDay(day));
     setIsWaitingForReply(false);
+
     if (replyTimeoutRef.current) {
       clearTimeout(replyTimeoutRef.current);
       replyTimeoutRef.current = null;
@@ -103,84 +116,6 @@ export default function App() {
     setCurrentSprite(dayIdleSprite);
   }, [dayIdleSprite]);
 
-  const pushSystem = (text) => {
-    setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
-  };
-
-  const beginInteractionCooldown = (durationMs = INTERACTION_COOLDOWN_MS) => {
-    if (isInteractionCoolingDown) return false;
-    setIsInteractionCoolingDown(true);
-    if (interactionCooldownTimeoutRef.current) {
-      clearTimeout(interactionCooldownTimeoutRef.current);
-    }
-    interactionCooldownTimeoutRef.current = window.setTimeout(() => {
-      setIsInteractionCoolingDown(false);
-      interactionCooldownTimeoutRef.current = null;
-    }, durationMs);
-    return true;
-  };
-
-  const handlePet = () => {
-    const willAnimate = trustLevel >= 4;
-    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
-    if (willAnimate) {
-      pushSystem("You pet Meowzart gently. Meowzart purrs!");
-      setIsPetAnimationActive(true);
-      if (petAnimationTimeoutRef.current) {
-        clearTimeout(petAnimationTimeoutRef.current);
-      }
-      petAnimationTimeoutRef.current = setTimeout(() => {
-        setIsPetAnimationActive(false);
-        petAnimationTimeoutRef.current = null;
-      }, ANIMATION_DURATION_MS);
-    }
-    else {
-      pushSystem("Meowzart stays hidden in the box and avoids touch.");
-    }
-  };
-
-  const handleFeed = () => {
-    const willAnimate = trustLevel >= 4;
-    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
-    const nextProgress = { ...progress, attemptedFeed: true };
-    setProgress(nextProgress);
-    if (willAnimate) {
-      pushSystem("Meowzart happily eats the food you offer. Yum!");
-    }
-    else {
-      pushSystem("You place food nearby, but Meowzart refuses.");
-    }
-    maybeQueueLevelUp(nextProgress);
-  };
-
-  const handleFeedAnimationStateChange = (isAnimating) => {
-    setIsFeedAnimationActive(isAnimating);
-  };
-
-  const handleSitQuietly = () => {
-    const willAnimate = trustLevel === 2;
-    if (!beginInteractionCooldown(willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS)) return;
-    const nextProgress = {
-      ...progress,
-      attemptedSitQuietly: true,
-      spendTimeCount: progress.spendTimeCount + 1,
-    };
-    setProgress(nextProgress);
-    if (willAnimate) {
-      setIsTrust2SitAnimationActive(true);
-      if (trust2SitAnimationTimeoutRef.current) {
-        clearTimeout(trust2SitAnimationTimeoutRef.current);
-      }
-      trust2SitAnimationTimeoutRef.current = setTimeout(() => {
-        setIsTrust2SitAnimationActive(false);
-        trust2SitAnimationTimeoutRef.current = null;
-      }, ANIMATION_DURATION_MS);
-    }
-    pushSystem("You sit quietly near the box. Meowzart watches you cautiously.");
-    maybeQueueLevelUp(nextProgress);
-  };
-
-  // Preload sprite sheets so transitions feel smoother
   useEffect(() => {
     const images = [
       idleSprite,
@@ -194,8 +129,8 @@ export default function App() {
       img.src = src;
       return img;
     });
+
     return () => {
-      // allow GC to clean up
       images.forEach((img) => {
         img.onload = null;
       });
@@ -204,9 +139,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (replyTimeoutRef.current) {
-        clearTimeout(replyTimeoutRef.current);
-      }
+      if (replyTimeoutRef.current) clearTimeout(replyTimeoutRef.current);
       if (trust2SitAnimationTimeoutRef.current) {
         clearTimeout(trust2SitAnimationTimeoutRef.current);
       }
@@ -222,27 +155,163 @@ export default function App() {
     };
   }, []);
 
+  const pushSystem = (text) => {
+    setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
+  };
+
+  const beginInteractionCooldown = (
+    durationMs = INTERACTION_COOLDOWN_MS
+  ) => {
+    if (isInteractionCoolingDown) return false;
+
+    setIsInteractionCoolingDown(true);
+
+    if (interactionCooldownTimeoutRef.current) {
+      clearTimeout(interactionCooldownTimeoutRef.current);
+    }
+
+    interactionCooldownTimeoutRef.current = window.setTimeout(() => {
+      setIsInteractionCoolingDown(false);
+      interactionCooldownTimeoutRef.current = null;
+    }, durationMs);
+
+    return true;
+  };
+
+  const handlePet = () => {
+    const willAnimate = trustLevel >= 4;
+
+    if (
+      !beginInteractionCooldown(
+        willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS
+      )
+    ) {
+      return;
+    }
+
+    if (willAnimate) {
+      pushSystem("You pet Meowzart gently. Meowzart purrs!");
+      setIsPetAnimationActive(true);
+
+      if (petAnimationTimeoutRef.current) {
+        clearTimeout(petAnimationTimeoutRef.current);
+      }
+
+      petAnimationTimeoutRef.current = setTimeout(() => {
+        setIsPetAnimationActive(false);
+        petAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
+    } else {
+      setProgress((prev) => ({
+        ...prev,
+        forcedTouchCount: (prev.forcedTouchCount || 0) + 1,
+      }));
+
+      pushSystem("Meowzart recoils slightly and stays hidden.");
+    }
+  };
+
+  const handleFeed = () => {
+    const willAnimate = trustLevel >= 4;
+
+    if (
+      !beginInteractionCooldown(
+        willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS
+      )
+    ) {
+      return;
+    }
+
+    const nextProgress = {
+      ...progress,
+      attemptedFeed: true,
+    };
+
+    setProgress(nextProgress);
+
+    if (willAnimate) {
+      pushSystem("Meowzart happily eats the food you offer.");
+    } else {
+      pushSystem("You place food nearby, but Meowzart refuses.");
+    }
+
+    maybeQueueLevelUp(nextProgress);
+  };
+
+  const handleFeedAnimationStateChange = (isAnimating) => {
+    setIsFeedAnimationActive(isAnimating);
+  };
+
+  const handleSitQuietly = () => {
+    const willAnimate = trustLevel === 2;
+
+    if (
+      !beginInteractionCooldown(
+        willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS
+      )
+    ) {
+      return;
+    }
+
+    const nextProgress = {
+      ...progress,
+      attemptedSitQuietly: true,
+      spendTimeCount: progress.spendTimeCount + 1,
+    };
+
+    setProgress(nextProgress);
+
+    if (willAnimate) {
+      setIsTrust2SitAnimationActive(true);
+
+      if (trust2SitAnimationTimeoutRef.current) {
+        clearTimeout(trust2SitAnimationTimeoutRef.current);
+      }
+
+      trust2SitAnimationTimeoutRef.current = setTimeout(() => {
+        setIsTrust2SitAnimationActive(false);
+        trust2SitAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
+    }
+
+    pushSystem("You sit quietly nearby. Meowzart watches you cautiously.");
+    maybeQueueLevelUp(nextProgress);
+  };
+
   const handleSendMessage = (suggestedText, fromSuggestion = false) => {
     const text = (suggestedText ?? draftMessage).trim();
+    const gentle = isGentleTone(text);
+
     if (!text) return;
     if (isWaitingForReply) return;
 
     if (fromSuggestion) {
-      setQuickSuggestions((prev) => prev.filter((suggestion) => suggestion !== text));
+      setQuickSuggestions((prev) =>
+        prev.filter((suggestion) => suggestion !== text)
+      );
     }
+
     setMessages((prev) => [...prev, { from: "you", text, ts: Date.now() }]);
     setIsWaitingForReply(true);
+
     const nextProgress = {
       ...progress,
       dialogueCount: progress.dialogueCount + 1,
-      gentleDialogueCount: progress.gentleDialogueCount + (isGentleTone(text) ? 1 : 0),
+      gentleDialogueCount: progress.gentleDialogueCount + (gentle ? 1 : 0),
+      harshDialogueCount: gentle
+        ? progress.harshDialogueCount || 0
+        : (progress.harshDialogueCount || 0) + 1,
     };
+
     setProgress(nextProgress);
     maybeQueueLevelUp(nextProgress);
 
     replyTimeoutRef.current = window.setTimeout(() => {
       const reaction = trustLevel === 1 ? "Meowzart: ..." : "Meowzart: meow.";
-      setMessages((prev) => [...prev, { from: "meowzart", text: reaction, ts: Date.now() }]);
+      setMessages((prev) => [
+        ...prev,
+        { from: "meowzart", text: reaction, ts: Date.now() },
+      ]);
       setIsWaitingForReply(false);
       replyTimeoutRef.current = null;
     }, REPLY_DELAY_MS);
@@ -250,52 +319,66 @@ export default function App() {
     setDraftMessage("");
   };
 
-  const isMessageLocked = isWaitingForReply;
-
   const handleSendMessageKeyDown = (e) => {
     if (e.key !== "Enter") return;
-    if (isMessageLocked) return;
+    if (isWaitingForReply) return;
     handleSendMessage();
   };
 
   const handleSuggestionClick = (suggestion) => {
-    if (isMessageLocked) return;
+    if (isWaitingForReply) return;
     handleSendMessage(suggestion, true);
   };
 
-  const handleSendClick = () => {
-    if (isMessageLocked) return;
-    handleSendMessage();
-  };
+  const handleNextDay = (adminAdvance = false) => {
+    const nextDayNumber = dayRef.current + 1;
 
-  const handleNextDay = (forceAdvance = false) => {
-    if (isFading) return;
-    setIsFading(true);
+    const noInteraction =
+      progress.dialogueCount === 0 &&
+      !progress.attemptedFeed &&
+      !progress.attemptedSitQuietly &&
+      progress.spendTimeCount === 0;
 
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-      animationTimeoutRef.current = null;
+    const progressWithNegatives = {
+      ...progress,
+      ignoredDay: noInteraction,
+    };
+
+    let nextTrust = trustLevel;
+    let transitionMessage = null;
+
+    if (adminAdvance) {
+      nextTrust = Math.min(10, trustLevel + 1);
+    } else {
+      const regression = checkTrustRegression(
+        trustLevel,
+        progressWithNegatives
+      );
+
+      if (regression) {
+        nextTrust = regression.nextTrustLevel;
+        transitionMessage = regression.message;
+      } else if (pendingTrustLevel && pendingTrustLevel > trustLevel) {
+        nextTrust = pendingTrustLevel;
+        transitionMessage = "Meowzart seems a little more comfortable today.";
+      }
     }
 
+    setIsFading(true);
+
     window.setTimeout(() => {
-      const nextDay = dayRef.current + 1;
-      setDay(nextDay);
+      setTrustLevel(nextTrust);
+      setPendingTrustLevel(null);
+      setProgress(createProgressState());
+      setDay(nextDayNumber);
 
-      let dayMessage = `------Day ${nextDay}------`;
-
-      if (forceAdvance) {
-        const nextTrustLevel = Math.min(trustLevel + 1, 10);
-        setTrustLevel(nextTrustLevel);
-        setPendingTrustLevel(null);
-        setProgress(createProgressState());
-        dayMessage += ` Trust level is now ${nextTrustLevel}.`;
-      } else if (pendingTrustLevel) {
-        setTrustLevel(pendingTrustLevel);
-        setPendingTrustLevel(null);
-        setProgress(createProgressState());
-        dayMessage += ` Trust level is now ${pendingTrustLevel}.`;
-      }
-      setMessages([{ from: "day", text: dayMessage, ts: Date.now() }]);
+      setMessages((prev) => [
+        ...prev,
+        { from: "day", text: `Day ${nextDayNumber}`, ts: Date.now() },
+        ...(transitionMessage
+          ? [{ from: "system", text: transitionMessage, ts: Date.now() + 1 }]
+          : []),
+      ]);
 
       window.setTimeout(() => setIsFading(false), FADE_IN_MS);
     }, FADE_OUT_MS);
@@ -316,11 +399,9 @@ export default function App() {
               placeholder="your name"
               className="adopter-input"
             />{" "}
-            has officially adopted Meowzart. What a great day!
+            has officially adopted Meowzart.
           </p>
-          <button onClick={() => setStarted(true)}>
-            Start
-          </button>
+          <button onClick={() => setStarted(true)}>Start</button>
         </div>
       </div>
     );
@@ -329,6 +410,7 @@ export default function App() {
   return (
     <div className="pet-page">
       <div className={`fade-overlay ${isFading ? "fade-overlay--visible" : ""}`} />
+
       <div className="main">
         <div className="left">
           <div
@@ -336,8 +418,9 @@ export default function App() {
             style={{ backgroundImage: `url(${roomBackground})` }}
           >
             <div className="day-badge" aria-label="day counter">
-              Day {day} | Trust {trustLevel}
+              Day {day} | {meters.trust.label}
             </div>
+
             <Pet
               currentSprite={currentSprite}
               trustLevel={trustLevel}
@@ -348,17 +431,24 @@ export default function App() {
               eatingSprite={eatingSprite}
             />
           </div>
+
           <div className="room-footer">
             <div className="action-buttons">
-              <button onClick={handlePet} disabled={isInteractionCoolingDown}>Pet</button>
-              <Feed 
-                onFeed={handleFeed} 
-                disabled={isInteractionCoolingDown} 
+              <button onClick={handlePet} disabled={isInteractionCoolingDown}>
+                Pet
+              </button>
+              <Feed
+                onFeed={handleFeed}
+                disabled={isInteractionCoolingDown}
                 trustLevel={trustLevel}
                 onAnimationStateChange={handleFeedAnimationStateChange}
               />
-              <Sit onSitQuietly={handleSitQuietly} disabled={isInteractionCoolingDown} />
+              <Sit
+                onSitQuietly={handleSitQuietly}
+                disabled={isInteractionCoolingDown}
+              />
             </div>
+
             <button
               className="next-day-room"
               onClick={() => handleNextDay(false)}
@@ -366,6 +456,7 @@ export default function App() {
             >
               Next day
             </button>
+
             <button
               className="admin-next-day"
               onClick={() => handleNextDay(true)}
@@ -385,6 +476,7 @@ export default function App() {
             comfortLabel={meters.comfort.label}
             comfortValue={meters.comfort.value}
           />
+
           <Talk
             messages={messages}
             quickSuggestions={quickSuggestions}
@@ -392,7 +484,7 @@ export default function App() {
             onDraftChange={setDraftMessage}
             onSendMessage={handleSendMessage}
             onSuggestionClick={handleSuggestionClick}
-            isLocked={isMessageLocked}
+            isLocked={isWaitingForReply}
             onKeyDown={handleSendMessageKeyDown}
           />
         </div>
