@@ -16,19 +16,132 @@ import {
   FADE_IN_MS,
   REPLY_DELAY_MS,
   INTERACTION_COOLDOWN_MS,
-  getSuggestionsForDay,
   createProgressState,
   isGentleTone,
 } from "./utils";
 import "./App.css";
 
-import idleSprite from "./assets/cat animations/Idle.png";
 import box2Sprite from "./assets/cat animations/Box2.png";
 import box3IdleSprite from "./assets/cat animations/Box3.png";
+import idleSprite from "./assets/cat animations/Idle.png";
+import waitingSprite from "./assets/cat animations/Waiting.png";
+import sadSprite from "./assets/cat animations/Sad.png";
+import crySprite from "./assets/cat animations/Cry.png";
+import layDownSprite from "./assets/cat animations/LayDown.png";
+import excitedSprite from "./assets/cat animations/Excited.png";
 import petSprite from "./assets/cat animations/Pet.png";
 import eatingSprite from "./assets/cat animations/Eating.png";
 import adoptionSprite from "./assets/cat animations/adoption.png";
 import roomBackground from "./assets/cat animations/ExampleRooms/ExampleRoom 2.png";
+
+const STAGE_CONFIG = {
+  1: {
+    label: "Fear",
+    sprite: box2Sprite,
+    entryMessage: "Meowzart stays inside the box. It seems tense.",
+    replyText: "Meowzart: ...",
+    suggestions: ["It's okay", "I'll stay here"],
+    feedText: "You place food nearby. Meowzart doesn't approach.",
+    petText: "Meowzart recoils slightly and stays hidden.",
+    sitText: "You sit nearby. Meowzart watches from inside the box.",
+  },
+  2: {
+    label: "Observation",
+    sprite: box2Sprite,
+    entryMessage: "Meowzart watches you from inside the box. It seems unsure, but alert.",
+    replyText: "Meowzart: ...",
+    suggestions: ["You can come out", "I won't get closer"],
+    feedText: "Meowzart looks at the food, but stays inside.",
+    petText: "Meowzart pulls back.",
+    sitText: "Meowzart keeps watching you.",
+  },
+  3: {
+    label: "First Step",
+    sprite: box3IdleSprite,
+    entryMessage:
+      "Meowzart steps out of the box, but keeps its distance.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["You can stay there", "Hi..."],
+    feedText: "Meowzart approaches slightly, then stops.",
+    petText: "Meowzart startles and steps back.",
+    sitText: "Meowzart stays nearby, watching.",
+  },
+  4: {
+    label: "Tolerance",
+    sprite: waitingSprite,
+    entryMessage: "Meowzart stays nearby. It seems less tense.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["Take your time", "I'll stay here"],
+    feedText: "Meowzart sniffs the food, then backs away.",
+    petText: "Meowzart hesitates, then moves away.",
+    sitText: "Meowzart remains close.",
+  },
+  5: {
+    label: "Curiosity",
+    sprite: waitingSprite,
+    entryMessage: "Meowzart lingers nearby and watches you carefully.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["It's safe", "You don't have to rush"],
+    feedText: "Meowzart nibbles the food, then backs away.",
+    petText: "Meowzart isn't ready for touch yet.",
+    sitText: "Meowzart stays close a little longer.",
+  },
+  6: {
+    label: "First Acceptance",
+    sprite: waitingSprite,
+    entryMessage: "Meowzart seems less afraid now.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["You can try it", "Good job"],
+    feedText: "Meowzart eats a little, then steps back.",
+    petText: "Meowzart isn't ready for touch yet.",
+    sitText: "Meowzart stays nearby.",
+  },
+  7: {
+    label: "Setback",
+    sprite: crySprite,
+    entryMessage:
+      "There's a storm! The thunder startles Meowzart. It's distressed",
+    replyText: "Meowzart: ...",
+    suggestions: ["It's okay", "I'm still here"],
+    feedText: "Meowzart nibbles the food, then backs away.",
+    petText: "Meowzart recoils.",
+    sitText: "Meowzart retreats.",
+  },
+  8: {
+    label: "Rebuilding",
+    sprite: sadSprite,
+    entryMessage: "Meowzart slowly comes out again. It seems cautious, but remembers you.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["You're safe", "I won't leave"],
+    feedText: "Meowzart approaches slowly and eats a little more.",
+    petText: "Meowzart steps away.",
+    sitText: "Meowzart stays near you longer.",
+  },
+  9: {
+    label: "Affection",
+    sprite: layDownSprite,
+    entryMessage: "Meowzart stays close. It seems comfortable.",
+    replyText: "Meowzart: meow.",
+    suggestions: ["Hey...", "Good job"],
+    feedText: "Meowzart eats comfortably.",
+    petText: "Meowzart allows a gentle touch.",
+    sitText: "Meowzart rests nearby.",
+  },
+  10: {
+    label: "Bond",
+    sprite: excitedSprite,
+    entryMessage: "Meowzart remains near you. It appears relaxed.",
+    replyText: "Meowzart: meow!",
+    suggestions: ["Hi Meowzart", "Let's stay here"],
+    feedText: "Meowzart happily eats.",
+    petText: "Meowzart leans into your hand.",
+    sitText: "Meowzart relaxes beside you.",
+  },
+};
+
+function getStage(level) {
+  return STAGE_CONFIG[Math.max(1, Math.min(10, level))] ?? STAGE_CONFIG[1];
+}
 
 export default function App() {
   const [started, setStarted] = useState(false);
@@ -37,6 +150,7 @@ export default function App() {
   const [trustLevel, setTrustLevel] = useState(1);
   const [pendingTrustLevel, setPendingTrustLevel] = useState(null);
   const [progress, setProgress] = useState(() => createProgressState());
+  const [stormTriggered, setStormTriggered] = useState(false);
 
   const dayRef = useRef(day);
   const animationTimeoutRef = useRef(null);
@@ -45,7 +159,7 @@ export default function App() {
   const interactionCooldownTimeoutRef = useRef(null);
   const replyTimeoutRef = useRef(null);
 
-  const [currentSprite, setCurrentSprite] = useState(idleSprite);
+  const [currentSprite, setCurrentSprite] = useState(box2Sprite);
   const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] =
     useState(false);
   const [isPetAnimationActive, setIsPetAnimationActive] = useState(false);
@@ -57,23 +171,18 @@ export default function App() {
   const [messages, setMessages] = useState(() => [
     {
       from: "system",
-      text: "Meowzart appears afraid and refuses to leave the box.",
+      text: STAGE_CONFIG[1].entryMessage,
       ts: Date.now(),
     },
   ]);
 
   const [draftMessage, setDraftMessage] = useState("");
-  const [quickSuggestions, setQuickSuggestions] = useState(() =>
-    getSuggestionsForDay(1)
+  const [quickSuggestions, setQuickSuggestions] = useState(
+    STAGE_CONFIG[1].suggestions
   );
   const [isWaitingForReply, setIsWaitingForReply] = useState(false);
 
-  const dayIdleSprite = useMemo(() => {
-    if (trustLevel === 1) return box2Sprite;
-    if (trustLevel === 2) return box2Sprite;
-    if (trustLevel === 3) return box3IdleSprite;
-    return idleSprite;
-  }, [trustLevel]);
+  const stage = useMemo(() => getStage(trustLevel), [trustLevel]);
 
   const meters = useMemo(() => {
     return {
@@ -102,25 +211,30 @@ export default function App() {
   }, [day]);
 
   useEffect(() => {
-    setQuickSuggestions(getSuggestionsForDay(day));
+    setQuickSuggestions(stage.suggestions);
     setIsWaitingForReply(false);
 
     if (replyTimeoutRef.current) {
       clearTimeout(replyTimeoutRef.current);
       replyTimeoutRef.current = null;
     }
-  }, [day, trustLevel]);
+  }, [day, trustLevel, stage]);
 
   useEffect(() => {
     if (animationTimeoutRef.current) return;
-    setCurrentSprite(dayIdleSprite);
-  }, [dayIdleSprite]);
+    setCurrentSprite(stage.sprite);
+  }, [stage]);
 
   useEffect(() => {
     const images = [
-      idleSprite,
       box2Sprite,
       box3IdleSprite,
+      idleSprite,
+      waitingSprite,
+      sadSprite,
+      crySprite,
+      layDownSprite,
+      excitedSprite,
       petSprite,
       eatingSprite,
       adoptionSprite,
@@ -179,7 +293,7 @@ export default function App() {
   };
 
   const handlePet = () => {
-    const willAnimate = trustLevel >= 4;
+    const willAnimate = trustLevel >= 9;
 
     if (
       !beginInteractionCooldown(
@@ -190,7 +304,7 @@ export default function App() {
     }
 
     if (willAnimate) {
-      pushSystem("You pet Meowzart gently. Meowzart purrs!");
+      pushSystem(stage.petText);
       setIsPetAnimationActive(true);
 
       if (petAnimationTimeoutRef.current) {
@@ -207,12 +321,12 @@ export default function App() {
         forcedTouchCount: (prev.forcedTouchCount || 0) + 1,
       }));
 
-      pushSystem("Meowzart recoils slightly and stays hidden.");
+      pushSystem(stage.petText);
     }
   };
 
   const handleFeed = () => {
-    const willAnimate = trustLevel >= 4;
+    const willAnimate = trustLevel >= 6;
 
     if (
       !beginInteractionCooldown(
@@ -228,13 +342,7 @@ export default function App() {
     };
 
     setProgress(nextProgress);
-
-    if (willAnimate) {
-      pushSystem("Meowzart happily eats the food you offer.");
-    } else {
-      pushSystem("You place food nearby, but Meowzart refuses.");
-    }
-
+    pushSystem(stage.feedText);
     maybeQueueLevelUp(nextProgress);
   };
 
@@ -274,7 +382,7 @@ export default function App() {
       }, ANIMATION_DURATION_MS);
     }
 
-    pushSystem("You sit quietly nearby. Meowzart watches you cautiously.");
+    pushSystem(stage.sitText);
     maybeQueueLevelUp(nextProgress);
   };
 
@@ -307,10 +415,9 @@ export default function App() {
     maybeQueueLevelUp(nextProgress);
 
     replyTimeoutRef.current = window.setTimeout(() => {
-      const reaction = trustLevel === 1 ? "Meowzart: ..." : "Meowzart: meow.";
       setMessages((prev) => [
         ...prev,
-        { from: "meowzart", text: reaction, ts: Date.now() },
+        { from: "meowzart", text: stage.replyText, ts: Date.now() },
       ]);
       setIsWaitingForReply(false);
       replyTimeoutRef.current = null;
@@ -346,9 +453,14 @@ export default function App() {
 
     let nextTrust = trustLevel;
     let transitionMessage = null;
+    let nextStormTriggered = stormTriggered;
 
     if (adminAdvance) {
       nextTrust = Math.min(10, trustLevel + 1);
+      if (nextTrust === 7) {
+        transitionMessage = STAGE_CONFIG[7].entryMessage;
+        nextStormTriggered = true;
+      }
     } else {
       const regression = checkTrustRegression(
         trustLevel,
@@ -360,7 +472,13 @@ export default function App() {
         transitionMessage = regression.message;
       } else if (pendingTrustLevel && pendingTrustLevel > trustLevel) {
         nextTrust = pendingTrustLevel;
-        transitionMessage = "Meowzart seems a little more comfortable today.";
+
+        if (nextTrust === 7 && !stormTriggered) {
+          transitionMessage = STAGE_CONFIG[7].entryMessage;
+          nextStormTriggered = true;
+        } else {
+          transitionMessage = getStage(nextTrust).entryMessage;
+        }
       }
     }
 
@@ -368,6 +486,7 @@ export default function App() {
 
     window.setTimeout(() => {
       setTrustLevel(nextTrust);
+      setStormTriggered(nextStormTriggered);
       setPendingTrustLevel(null);
       setProgress(createProgressState());
       setDay(nextDayNumber);
@@ -421,15 +540,17 @@ export default function App() {
               Day {day} | {meters.trust.label}
             </div>
 
-            <Pet
-              currentSprite={currentSprite}
-              trustLevel={trustLevel}
-              isTrust2SitAnimationActive={isTrust2SitAnimationActive}
-              isPetAnimationActive={isPetAnimationActive}
-              petSprite={petSprite}
-              isFeedAnimationActive={isFeedAnimationActive}
-              eatingSprite={eatingSprite}
-            />
+            <div className="pet-anchor">
+              <Pet
+                currentSprite={currentSprite}
+                trustLevel={trustLevel}
+                isTrust2SitAnimationActive={isTrust2SitAnimationActive}
+                isPetAnimationActive={isPetAnimationActive}
+                petSprite={petSprite}
+                isFeedAnimationActive={isFeedAnimationActive}
+                eatingSprite={eatingSprite}
+              />
+            </div>
           </div>
 
           <div className="room-footer">
@@ -463,7 +584,7 @@ export default function App() {
               disabled={isFading}
               title="Testing only: next day + trust level +1"
             >
-              Admin Next Trust
+              SKIP (DEMO ONLY)
             </button>
           </div>
         </div>

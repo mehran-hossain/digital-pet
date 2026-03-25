@@ -3,19 +3,21 @@ function clamp(num, min, max) {
 }
 
 export function getTrustLabel(level) {
-  if (level === 1) return "Uneasy";
-  if (level === 2) return "Warming up";
-  if (level === 3) return "Friendly";
-  if (level >= 4) return "Loving";
-  return "Uneasy";
+  if (level === 1) return "Fear";
+  if (level === 2) return "Observation";
+  if (level === 3) return "First Step";
+  if (level === 4) return "Tolerance";
+  if (level === 5) return "Curiosity";
+  if (level === 6) return "Acceptance";
+  if (level === 7) return "Setback";
+  if (level === 8) return "Rebuilding";
+  if (level === 9) return "Affection";
+  if (level >= 10) return "Bond";
+  return "Fear";
 }
 
 export function calculateTrustMeter(trustLevel) {
-  let value = 15;
-
-  if (trustLevel === 2) value = 30;
-  else if (trustLevel === 3) value = 45;
-  else if (trustLevel >= 4) value = clamp(45 + (trustLevel - 3) * 8, 1, 100);
+  const value = clamp(10 + (trustLevel - 1) * 10, 1, 100);
 
   return {
     value,
@@ -64,7 +66,7 @@ export function checkTrustProgression(trustLevel, progress) {
     if (canProgress) {
       return {
         nextTrustLevel: 3,
-        message: "Meowzart seems more comfortable around you.",
+        message: "Meowzart seems willing to come a little closer.",
       };
     }
 
@@ -79,7 +81,7 @@ export function checkTrustProgression(trustLevel, progress) {
     if (canProgress && trustLevel < 10) {
       return {
         nextTrustLevel: trustLevel + 1,
-        message: "Meowzart seems a little more trusting.",
+        message: "Meowzart seems ready for the next step.",
       };
     }
 
