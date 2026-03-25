@@ -27,16 +27,35 @@ export function getSuggestionsForDay(day) {
 
 export function createProgressState() {
   return {
+    // Cumulative progress (persists across days)
     dialogueCount: 0,
     gentleDialogueCount: 0,
     attemptedFeed: false,
     attemptedSitQuietly: false,
     spendTimeCount: 0,
 
-    // negative progression tracker
-    harshDialogueCount: 0,
-    ignoredDay: false,
-    forcedTouchCount: 0,
+    // Daily counters (reset each day, used for regression checks)
+    dailyDialogueCount: 0,
+    dailyGentleDialogueCount: 0,
+    dailyHarshDialogueCount: 0,
+    dailyAttemptedFeed: false,
+    dailyAttemptedSitQuietly: false,
+    dailySpendTimeCount: 0,
+    dailyForcedTouchCount: 0,
+  };
+}
+
+export function resetDailyProgress(progress) {
+  return {
+    ...progress,
+    // Reset daily counters while preserving cumulative progress
+    dailyDialogueCount: 0,
+    dailyGentleDialogueCount: 0,
+    dailyHarshDialogueCount: 0,
+    dailyAttemptedFeed: false,
+    dailyAttemptedSitQuietly: false,
+    dailySpendTimeCount: 0,
+    dailyForcedTouchCount: 0,
   };
 }
 

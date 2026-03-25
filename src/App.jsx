@@ -17,6 +17,7 @@ import {
   REPLY_DELAY_MS,
   INTERACTION_COOLDOWN_MS,
   createProgressState,
+  resetDailyProgress,
   isGentleTone,
 } from "./utils";
 import "./App.css";
@@ -318,7 +319,7 @@ export default function App() {
     } else {
       setProgress((prev) => ({
         ...prev,
-        forcedTouchCount: (prev.forcedTouchCount || 0) + 1,
+        dailyForcedTouchCount: (prev.dailyForcedTouchCount || 0) + 1,
       }));
 
       pushSystem(stage.petText);
@@ -339,6 +340,7 @@ export default function App() {
     const nextProgress = {
       ...progress,
       attemptedFeed: true,
+      dailyAttemptedFeed: true,
     };
 
     setProgress(nextProgress);
@@ -365,6 +367,8 @@ export default function App() {
       ...progress,
       attemptedSitQuietly: true,
       spendTimeCount: progress.spendTimeCount + 1,
+      dailyAttemptedSitQuietly: true,
+      dailySpendTimeCount: progress.dailySpendTimeCount + 1,
     };
 
     setProgress(nextProgress);
@@ -406,9 +410,11 @@ export default function App() {
       ...progress,
       dialogueCount: progress.dialogueCount + 1,
       gentleDialogueCount: progress.gentleDialogueCount + (gentle ? 1 : 0),
-      harshDialogueCount: gentle
-        ? progress.harshDialogueCount || 0
-        : (progress.harshDialogueCount || 0) + 1,
+      dailyDialogueCount: progress.dailyDialogueCount + 1,
+      dailyGentleDialogueCount: progress.dailyGentleDialogueCount + (gentle ? 1 : 0),
+      dailyHarshDialogueCount: gentle
+        ? progress.dailyHarshDialogueCount || 0
+        : (progress.dailyHarshDialogueCount || 0) + 1,
     };
 
     setProgress(nextProgress);
@@ -440,15 +446,15 @@ export default function App() {
   const handleNextDay = (adminAdvance = false) => {
     const nextDayNumber = dayRef.current + 1;
 
-    const noInteraction =
-      progress.dialogueCount === 0 &&
-      !progress.attemptedFeed &&
-      !progress.attemptedSitQuietly &&
-      progress.spendTimeCount === 0;
+    const noInteractionToday =
+      progress.dailyDialogueCount === 0 &&
+      !progress.dailyAttemptedFeed &&
+      !progress.dailyAttemptedSitQuietly &&
+      progress.dailySpendTimeCount === 0;
 
     const progressWithNegatives = {
       ...progress,
-      ignoredDay: noInteraction,
+      ignoredDay: noInteractionToday,
     };
 
     let nextTrust = trustLevel;
@@ -488,7 +494,7 @@ export default function App() {
       setTrustLevel(nextTrust);
       setStormTriggered(nextStormTriggered);
       setPendingTrustLevel(null);
-      setProgress(createProgressState());
+      setProgress((prev) => resetDailyProgress(prev));
       setDay(nextDayNumber);
 
       setMessages((prev) => [

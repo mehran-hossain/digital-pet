@@ -28,10 +28,16 @@ export function calculateTrustMeter(trustLevel) {
 export function checkTrustRegression(trustLevel, progress) {
   if (trustLevel <= 1) return null;
 
+  const noInteractionToday =
+    progress.dailyDialogueCount === 0 &&
+    !progress.dailyAttemptedFeed &&
+    !progress.dailyAttemptedSitQuietly &&
+    progress.dailySpendTimeCount === 0;
+
   const shouldRegress =
-    progress.ignoredDay ||
-    progress.harshDialogueCount >= 2 ||
-    progress.forcedTouchCount >= 2;
+    noInteractionToday ||
+    progress.dailyHarshDialogueCount >= 2 ||
+    progress.dailyForcedTouchCount >= 2;
 
   if (!shouldRegress) return null;
 
