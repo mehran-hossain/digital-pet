@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from "react";
+
 export function Talk({
   messages,
   quickSuggestions,
@@ -8,9 +10,20 @@ export function Talk({
   isLocked = false,
   onKeyDown,
 }) {
+  const logRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
   return (
     <div className="message-box">
-      <div className="message-log" aria-label="messages">
+      <div
+        ref={logRef}
+        className="message-log"
+        aria-label="messages"
+      >
         {messages.slice(-6).map((m) => (
           <div
             key={`${m.ts}-${m.from}-${m.text}`}

@@ -23,6 +23,9 @@ import {
 import "./App.css";
 
 import box2Sprite from "./assets/cat animations/Box2.png";
+import box2BlinkSprite from "./assets/cat animations/box2-blink.png";
+import box2WatchSprite from "./assets/cat animations/Box2-watch.png";
+import box2ExclaimSprite from "./assets/cat animations/Box2-exclaim.png";
 import box3IdleSprite from "./assets/cat animations/Box3.png";
 import idleSprite from "./assets/cat animations/Idle.png";
 import waitingSprite from "./assets/cat animations/Waiting.png";
@@ -157,14 +160,21 @@ export default function App() {
   const animationTimeoutRef = useRef(null);
   const trust2SitAnimationTimeoutRef = useRef(null);
   const petAnimationTimeoutRef = useRef(null);
+  const petRefusalAnimationTimeoutRef = useRef(null);
+  const feedFailureAnimationTimeoutRef = useRef(null);
   const interactionCooldownTimeoutRef = useRef(null);
   const replyTimeoutRef = useRef(null);
 
   const [currentSprite, setCurrentSprite] = useState(box2Sprite);
+  const [isCatInBox, setIsCatInBox] = useState(trustLevel <= 2);
   const [isTrust2SitAnimationActive, setIsTrust2SitAnimationActive] =
     useState(false);
   const [isPetAnimationActive, setIsPetAnimationActive] = useState(false);
+  const [isPetRefusalAnimationActive, setIsPetRefusalAnimationActive] =
+    useState(false);
   const [isFeedAnimationActive, setIsFeedAnimationActive] = useState(false);
+  const [isFeedFailureAnimationActive, setIsFeedFailureAnimationActive] =
+    useState(false);
   const [isInteractionCoolingDown, setIsInteractionCoolingDown] =
     useState(false);
   const [isFading, setIsFading] = useState(false);
@@ -182,6 +192,8 @@ export default function App() {
     STAGE_CONFIG[1].suggestions
   );
   const [isWaitingForReply, setIsWaitingForReply] = useState(false);
+  const [isTrustLevelModalOpen, setIsTrustLevelModalOpen] = useState(false);
+  const [isRegressionModalOpen, setIsRegressionModalOpen] = useState(false);
 
   const stage = useMemo(() => getStage(trustLevel), [trustLevel]);
 
@@ -195,21 +207,42 @@ export default function App() {
   const maybeQueueLevelUp = (updatedProgress) => {
     const progression = checkTrustProgression(trustLevel, updatedProgress);
     if (progression) {
+      if (
+        pendingTrustLevel &&
+        pendingTrustLevel >= progression.nextTrustLevel
+      ) {
+        return;
+      }
       setPendingTrustLevel(progression.nextTrustLevel);
-      setMessages((prev) => [
-        ...prev,
-        {
-          from: "system",
-          text: progression.message,
-          ts: Date.now(),
-        },
-      ]);
+      setIsTrustLevelModalOpen(true);
     }
   };
 
   useEffect(() => {
     dayRef.current = day;
   }, [day]);
+
+  useEffect(() => {
+    setIsCatInBox(trustLevel <= 2);
+  }, [trustLevel]);
+
+  useEffect(() => {
+    if (isCatInBox) return;
+
+    // Stop in-box-only animations once Meowzart has stepped out.
+    setIsTrust2SitAnimationActive(false);
+    setIsFeedFailureAnimationActive(false);
+
+    if (trust2SitAnimationTimeoutRef.current) {
+      clearTimeout(trust2SitAnimationTimeoutRef.current);
+      trust2SitAnimationTimeoutRef.current = null;
+    }
+
+    if (feedFailureAnimationTimeoutRef.current) {
+      clearTimeout(feedFailureAnimationTimeoutRef.current);
+      feedFailureAnimationTimeoutRef.current = null;
+    }
+  }, [isCatInBox]);
 
   useEffect(() => {
     setQuickSuggestions(stage.suggestions);
@@ -238,6 +271,8 @@ export default function App() {
       excitedSprite,
       petSprite,
       eatingSprite,
+      box2ExclaimSprite,
+      box2WatchSprite,
       adoptionSprite,
     ].map((src) => {
       const img = new Image();
@@ -260,6 +295,12 @@ export default function App() {
       }
       if (petAnimationTimeoutRef.current) {
         clearTimeout(petAnimationTimeoutRef.current);
+      }
+      if (petRefusalAnimationTimeoutRef.current) {
+        clearTimeout(petRefusalAnimationTimeoutRef.current);
+      }
+      if (feedFailureAnimationTimeoutRef.current) {
+        clearTimeout(feedFailureAnimationTimeoutRef.current);
       }
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
@@ -294,17 +335,13 @@ export default function App() {
   };
 
   const handlePet = () => {
-    const willAnimate = trustLevel >= 9;
+    const willAnimateAccept = trustLevel >= 9;
 
-    if (
-      !beginInteractionCooldown(
-        willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS
-      )
-    ) {
+    if (!beginInteractionCooldown(ANIMATION_DURATION_MS)) {
       return;
     }
 
-    if (willAnimate) {
+    if (willAnimateAccept) {
       pushSystem(stage.petText);
       setIsPetAnimationActive(true);
 
@@ -323,17 +360,23 @@ export default function App() {
       }));
 
       pushSystem(stage.petText);
+      setIsPetRefusalAnimationActive(true);
+
+      if (petRefusalAnimationTimeoutRef.current) {
+        clearTimeout(petRefusalAnimationTimeoutRef.current);
+      }
+
+      petRefusalAnimationTimeoutRef.current = setTimeout(() => {
+        setIsPetRefusalAnimationActive(false);
+        petRefusalAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
     }
   };
 
   const handleFeed = () => {
     const willAnimate = trustLevel >= 6;
 
-    if (
-      !beginInteractionCooldown(
-        willAnimate ? ANIMATION_DURATION_MS : INTERACTION_COOLDOWN_MS
-      )
-    ) {
+    if (!beginInteractionCooldown(ANIMATION_DURATION_MS)) {
       return;
     }
 
@@ -346,6 +389,27 @@ export default function App() {
     setProgress(nextProgress);
     pushSystem(stage.feedText);
     maybeQueueLevelUp(nextProgress);
+
+    if (!willAnimate && isCatInBox) {
+      setIsFeedFailureAnimationActive(true);
+
+      if (feedFailureAnimationTimeoutRef.current) {
+        clearTimeout(feedFailureAnimationTimeoutRef.current);
+      }
+
+      feedFailureAnimationTimeoutRef.current = window.setTimeout(() => {
+        setIsFeedFailureAnimationActive(false);
+        feedFailureAnimationTimeoutRef.current = null;
+      }, ANIMATION_DURATION_MS);
+    } else if (!willAnimate) {
+      // Cat is out; don't show in-box feed-failure animation.
+      setIsFeedFailureAnimationActive(false);
+
+      if (feedFailureAnimationTimeoutRef.current) {
+        clearTimeout(feedFailureAnimationTimeoutRef.current);
+        feedFailureAnimationTimeoutRef.current = null;
+      }
+    }
   };
 
   const handleFeedAnimationStateChange = (isAnimating) => {
@@ -353,7 +417,8 @@ export default function App() {
   };
 
   const handleSitQuietly = () => {
-    const willAnimate = trustLevel === 2;
+    // Cat is in the box while trustLevel is 1-2; use blink animation there.
+    const willAnimate = trustLevel <= 2;
 
     if (
       !beginInteractionCooldown(
@@ -443,7 +508,7 @@ export default function App() {
     handleSendMessage(suggestion, true);
   };
 
-  const handleNextDay = (adminAdvance = false) => {
+  const handleNextDay = (adminAdvance = false, bypassRegressionModal = false) => {
     const nextDayNumber = dayRef.current + 1;
 
     const noInteractionToday =
@@ -474,6 +539,10 @@ export default function App() {
       );
 
       if (regression) {
+        if (!bypassRegressionModal) {
+          setIsRegressionModalOpen(true);
+          return;
+        }
         nextTrust = regression.nextTrustLevel;
         transitionMessage = regression.message;
       } else if (pendingTrustLevel && pendingTrustLevel > trustLevel) {
@@ -488,13 +557,17 @@ export default function App() {
       }
     }
 
+    const didTrustIncrease = nextTrust > trustLevel;
+
     setIsFading(true);
 
     window.setTimeout(() => {
       setTrustLevel(nextTrust);
       setStormTriggered(nextStormTriggered);
       setPendingTrustLevel(null);
-      setProgress((prev) => resetDailyProgress(prev));
+      setProgress((prev) =>
+        didTrustIncrease ? createProgressState() : resetDailyProgress(prev)
+      );
       setDay(nextDayNumber);
 
       setMessages((prev) => [
@@ -507,6 +580,18 @@ export default function App() {
 
       window.setTimeout(() => setIsFading(false), FADE_IN_MS);
     }, FADE_OUT_MS);
+  };
+
+  const handleContinueToNextDay = () => {
+    if (isFading) return;
+    setIsTrustLevelModalOpen(false);
+    handleNextDay(false);
+  };
+
+  const handleContinueAfterRegression = () => {
+    if (isFading) return;
+    setIsRegressionModalOpen(false);
+    handleNextDay(false, true);
   };
 
   if (!started) {
@@ -535,6 +620,38 @@ export default function App() {
   return (
     <div className="pet-page">
       <div className={`fade-overlay ${isFading ? "fade-overlay--visible" : ""}`} />
+      {isTrustLevelModalOpen ? (
+        <div className="trust-level-modal-backdrop" role="presentation">
+          <div
+            className="trust-level-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Trust level increased"
+          >
+            <h3 className="trust-level-modal__title">Trust level increased!</h3>
+            <button className="next-day-room" onClick={handleContinueToNextDay}>
+              Continue
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {isRegressionModalOpen ? (
+        <div className="trust-level-modal-backdrop" role="presentation">
+          <div
+            className="trust-level-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Trust level decreased"
+          >
+            <h3 className="trust-level-modal__title">
+              Trust level decreased due to lack of daily interaction
+            </h3>
+            <button className="next-day-room" onClick={handleContinueAfterRegression}>
+              Continue
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="main">
         <div className="left">
@@ -550,11 +667,17 @@ export default function App() {
               <Pet
                 currentSprite={currentSprite}
                 trustLevel={trustLevel}
+                isCatInBox={isCatInBox}
                 isTrust2SitAnimationActive={isTrust2SitAnimationActive}
                 isPetAnimationActive={isPetAnimationActive}
                 petSprite={petSprite}
+                isPetRefusalAnimationActive={isPetRefusalAnimationActive}
+                petRefusalSprite={box2ExclaimSprite}
                 isFeedAnimationActive={isFeedAnimationActive}
                 eatingSprite={eatingSprite}
+                isFeedFailureAnimationActive={isFeedFailureAnimationActive}
+                feedFailureSprite={box2WatchSprite}
+                sitQuietSprite={box2BlinkSprite}
               />
             </div>
           </div>
