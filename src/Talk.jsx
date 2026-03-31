@@ -34,7 +34,7 @@ export function Talk({
         {messages.slice(-6).map((m) => (
           <div
             key={`${m.ts}-${m.from}-${m.text}`}
-            className={`message message--${m.from}`}
+            className={`message message--${m.from}${m.variant ? ` message--${m.variant}` : ""}`}
           >
             {m.text}
           </div>

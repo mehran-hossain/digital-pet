@@ -184,6 +184,14 @@
   letter-spacing: 0.2px;
 }
 
+.day-badge--pulse {
+  animation: day-badge-pulse 0.75s ease-out;
+}
+
+.status-mood-box--pulse {
+  animation: status-mood-box-pulse 0.8s ease-out;
+}
+
 .guidance-panel {
   width: 100%;
   max-width: 760px;
@@ -272,6 +280,21 @@
   cursor: not-allowed;
 }
 
+.status-mood-box {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(50, 90, 150, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+}
+
+.status-mood-box__title {
+  margin-bottom: 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1e3956;
+}
+
 .status-meters {
   display: flex;
   flex-direction: column;
@@ -306,11 +329,11 @@
 }
 
 .status-meter__fill--trust {
-  background: linear-gradient(90deg, #f3c76f 0%, #f3a860 100%);
+  background: linear-gradient(90deg, #ff4b4b 0%, #ffd86a 100%);
 }
 
 .status-meter__fill--comfort {
-  background: linear-gradient(90deg, #89d2ff 0%, #5fb2ff 100%);
+  background: linear-gradient(90deg, #4f96ff 0%, #ffd86a 100%);
 }
 
 .message-box {
@@ -344,13 +367,33 @@
 }
 
 .message--system {
-  background: #f1efe8;
+  background: #f7f2dc;
   color: #5b5347;
   border: 1px solid #d8d1c2;
   margin: 10px auto;
   text-align: center;
   font-size: 0.9rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  animation: system-message-enter 320ms ease-out;
+}
+
+.message--system.message--subtle {
+  animation: system-message-subtle 1.2s ease-in-out;
+}
+
+.message--system.message--progression {
+  background: #fff6c0;
+  border-color: #ffcc57;
+  box-shadow: 0 0 0 2px rgba(255, 203, 87, 0.28);
+  animation: message-progress-highlight 1.1s ease-out;
+}
+
+.message--system.message--big-highlight {
+  background: #fff2b8;
+  border-color: #ffc449;
+  box-shadow: 0 0 0 3px rgba(255, 196, 69, 0.32);
+  transform: scale(1.01);
+  animation: message-big-highlight 1.2s ease-out;
 }
 
 .message--meowzart {
@@ -375,6 +418,87 @@
   font-weight: 800;
   letter-spacing: 0.5px;
   padding: 4px 0;
+}
+
+@keyframes day-badge-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  35% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 8px rgba(255, 235, 144, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+@keyframes status-mood-box-pulse {
+  0% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 rgba(255, 219, 111, 0);
+  }
+  35% {
+    transform: translateY(-2px);
+    box-shadow: 0 0 0 12px rgba(255, 219, 111, 0.18);
+  }
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 rgba(255, 219, 111, 0);
+  }
+}
+
+@keyframes system-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes system-message-subtle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes message-progress-highlight {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  60% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes message-big-highlight {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .message-suggestions {

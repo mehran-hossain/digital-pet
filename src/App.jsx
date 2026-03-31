@@ -204,6 +204,8 @@ export default function App() {
   const [isFeedAnimationActive, setIsFeedAnimationActive] = useState(false);
   const [isInteractionCoolingDown, setIsInteractionCoolingDown] =
     useState(false);
+  const [isDayHighlightActive, setIsDayHighlightActive] = useState(false);
+  const [isMoodHighlightActive, setIsMoodHighlightActive] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const [messages, setMessages] = useState(() => [
@@ -211,6 +213,7 @@ export default function App() {
       from: "system",
       text: STAGE_CONFIG[1].entryMessage,
       ts: Date.now(),
+      variant: "big-highlight",
     },
     {
       from: "system",
@@ -234,6 +237,8 @@ export default function App() {
     };
   }, [trustLevel]);
 
+  const moodLabel = `${meters.comfort.label} & ${meters.trust.label}`;
+
   const maybeQueueLevelUp = (updatedProgress, levelOverride = trustLevelRef.current) => {
     const progression = checkTrustProgression(levelOverride, updatedProgress);
     if (progression) {
@@ -245,18 +250,37 @@ export default function App() {
           from: "system",
           text: progression.message,
           ts: Date.now(),
+          variant: "progression",
         },
       ]);
     }
   };
 
+  const dayMountedRef = useRef(false);
+  const moodMountedRef = useRef(false);
+
   useEffect(() => {
     dayRef.current = day;
+    if (dayMountedRef.current) {
+      setIsDayHighlightActive(true);
+      const timer = window.setTimeout(() => setIsDayHighlightActive(false), 900);
+      return () => clearTimeout(timer);
+    }
+    dayMountedRef.current = true;
   }, [day]);
 
   useEffect(() => {
     trustLevelRef.current = trustLevel;
   }, [trustLevel]);
+
+  useEffect(() => {
+    if (moodMountedRef.current) {
+      setIsMoodHighlightActive(true);
+      const timer = window.setTimeout(() => setIsMoodHighlightActive(false), 900);
+      return () => clearTimeout(timer);
+    }
+    moodMountedRef.current = true;
+  }, [meters.trust.label, meters.comfort.label]);
 
   useEffect(() => {
     pendingTrustLevelRef.current = pendingTrustLevel;
@@ -329,8 +353,11 @@ export default function App() {
     };
   }, []);
 
-  const pushSystem = (text) => {
-    setMessages((prev) => [...prev, { from: "system", text, ts: Date.now() }]);
+  const pushSystem = (text, variant = "subtle") => {
+    setMessages((prev) => [
+      ...prev,
+      { from: "system", text, ts: Date.now(), variant },
+    ]);
   };
 
   const beginInteractionCooldown = (
@@ -587,7 +614,14 @@ export default function App() {
         ...prev,
         { from: "day", text: `Day ${nextDayNumber}`, ts: Date.now() },
         ...(transitionMessage
-          ? [{ from: "system", text: transitionMessage, ts: Date.now() + 1 }]
+          ? [
+              {
+                from: "system",
+                text: transitionMessage,
+                ts: Date.now() + 1,
+                variant: "big-highlight",
+              },
+            ]
           : []),
       ]);
 
@@ -665,9 +699,12 @@ export default function App() {
             className="room"
             style={{ backgroundImage: `url(${roomBackground})` }}
           >
-            <div className="day-badge" aria-label="day counter">
-              Day {day} | {meters.trust.label}
-            </div>
+<div
+                className={`day-badge ${isDayHighlightActive ? "day-badge--pulse" : ""}`}
+                aria-label="day counter"
+              >
+                Day {day} | Mood: {moodLabel}
+              </div>
 
             <div className="pet-anchor">
               <Pet
@@ -737,6 +774,7 @@ export default function App() {
             trustValue={meters.trust.value}
             comfortLabel={meters.comfort.label}
             comfortValue={meters.comfort.value}
+            pulse={isMoodHighlightActive}
           />
 
           <Talk
