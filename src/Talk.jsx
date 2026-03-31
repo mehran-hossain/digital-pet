@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 export function Talk({
   messages,
   quickSuggestions,
@@ -8,9 +10,27 @@ export function Talk({
   isLocked = false,
   onKeyDown,
 }) {
+  const messageLogRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (!messageLogRef.current || !bottomRef.current) return;
+
+    requestAnimationFrame(() => {
+      bottomRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    });
+  }, [messages]);
+
   return (
     <div className="message-box">
-      <div className="message-log" aria-label="messages">
+      <div
+        ref={messageLogRef}
+        className="message-log"
+        aria-label="messages"
+      >
         {messages.slice(-6).map((m) => (
           <div
             key={`${m.ts}-${m.from}-${m.text}`}
@@ -19,8 +39,13 @@ export function Talk({
             {m.text}
           </div>
         ))}
+        <div ref={bottomRef} />
       </div>
-      <div className="message-suggestions" aria-label="quick message suggestions">
+
+      <div
+        className="message-suggestions"
+        aria-label="quick message suggestions"
+      >
         {quickSuggestions.map((suggestion) => (
           <button
             key={`suggestion-${suggestion}`}
@@ -33,6 +58,7 @@ export function Talk({
           </button>
         ))}
       </div>
+
       <div className="message-compose">
         <input
           value={draftMessage}
